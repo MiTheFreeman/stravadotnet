@@ -18,9 +18,12 @@
 #endregion
 
 using System;
+using System.Collections.Specialized;
 using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Web;
+
 using Strava.Activities;
 using Strava.Api;
 using Strava.Authentication;
@@ -52,7 +55,22 @@ namespace Strava.Clients
         /// <param name="activityType">The type of the activity.</param>
         /// <param name="isCommute">Set to true if this is a commute ride. Default is false.</param>
         /// <returns>The status of the upload.</returns>
-        public async Task<UploadStatus> UploadActivityAsync(string filePath, DataFormat dataFormat, ActivityType activityType = ActivityType.Ride, bool isCommute = false)
+        public Task<UploadStatus> UploadActivityAsync(string filePath, DataFormat dataFormat, ActivityType activityType = ActivityType.Ride, bool isCommute = false)
+        {
+            return UploadActivityAsync(filePath, null, null, dataFormat, activityType, isCommute);
+        }
+
+        /// <summary>
+        /// Uploads an activity with name and description.
+        /// </summary>
+        /// <param name="filePath">The path to the activity file on your local hard disk.</param>
+        /// <param name="name">The name of the activity shown on strava.</param>
+        /// <param name="description">The description of the activity shown on strava.</param>
+        /// <param name="dataFormat">The format of the file.</param>
+        /// <param name="activityType">The type of the activity.</param>
+        /// <param name="isCommute">Set to true if this is a commute ride. Default is false.</param>
+        /// <returns>The status of the upload.</returns>
+        public async Task<UploadStatus> UploadActivityAsync(string filePath, string name, string description, DataFormat dataFormat, ActivityType activityType = ActivityType.Ride, bool isCommute = false)
         {
             string format = string.Empty;
             int commuteRide = isCommute ? 1 : 0;
@@ -88,10 +106,18 @@ namespace Strava.Clients
 
             content.Add(new ByteArrayContent(File.ReadAllBytes(info.FullName)), "file", info.Name);
 
-            HttpResponseMessage result = await client.PostAsync(
-                string.Format("https://www.strava.com/api/v3/uploads?data_type={0}&activity_type={1}&commute={2}",
-                format, activityType.ToString().ToLower(), commuteRide),
-                content);
+            NameValueCollection queryString = HttpUtility.ParseQueryString($"data_type={format}&activity_type={activityType.ToString().ToLower()}&commute={commuteRide}");
+            if (!string.IsNullOrEmpty(name))
+            {
+                queryString.Add("name", name);
+            }
+            if (!string.IsNullOrEmpty(description))
+            {
+                queryString.Add("description", description);
+            }
+
+            string requestUri = $"https://www.strava.com/api/v3/uploads?{queryString}";
+            HttpResponseMessage result = await client.PostAsync(requestUri, content);
 
             string json = await result.Content.ReadAsStringAsync();
 
